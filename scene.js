@@ -1,4 +1,5 @@
 import { makeCubeCreator } from './cube';
+import { makeSphereCreator } from './sphere';
 
 main();
 
@@ -26,9 +27,8 @@ function main() {
     }
   };
 
-  const objectsCreators = [];
-  objectsCreators.push(makeCubeCreator());
 
+  const objectCreator = makeSphereCreator(gl);
   let then = 0;
   function render(now) {
     now *= 0.001; // convert to seconds
@@ -36,7 +36,7 @@ function main() {
     then = now;
 
     clearScene(gl);
-    drawObjects(objectsCreators, gl, programInfo, deltaTime);
+    drawObject(objectCreator, gl, programInfo, deltaTime);
 
     requestAnimationFrame(render);
   }
@@ -66,11 +66,8 @@ function clearScene(gl) {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 
-function drawObjects(objects, gl, programInfo, deltaTime) {
-  objects.forEach(object => {
-    const buffers = object.createBuffers(gl);
-    object.drawObject(gl, programInfo, buffers, deltaTime);
-  });
+function drawObject(object, gl, programInfo, deltaTime) {
+    object.drawObject(gl, programInfo, object.buffers, deltaTime);
 }
 
 function createShaders() {
@@ -83,29 +80,29 @@ function createShaders() {
     uniform mat4 uProjectionMatrix;
     uniform mat4 uNormalMatrix;
     
-    varying lowp vec4 vColor;
-    varying highp vec3 vLighting;
+    varying mediump vec4 vColor;
+    varying mediump vec4 vTransformedNormal;
 
     void main() {
       gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-      vColor = aVertexColor;
       
-      highp vec3 ambientLight = vec3(0.3, 0.3, 0.3);
-      highp vec3 directionalLightColor = vec3(1, 1, 1);
-      highp vec3 directionalVector = normalize(vec3(0.85, 0.8, 0.75));
-
-      highp vec4 transformedNormal = uNormalMatrix * vec4(aVertexNormal, 1.0);
-
-      highp float directional = max(dot(transformedNormal.xyz, directionalVector), 0.0);
-      vLighting = ambientLight + (directionalLightColor * directional);
+      vTransformedNormal = uNormalMatrix * vec4(aVertexNormal, 1.0);
+      vColor = aVertexColor;
     }
   `;
 
   const fsSource = `
-    varying lowp vec4 vColor;
-    varying highp vec3 vLighting;
+    varying mediump vec4 vColor;
+    varying mediump vec4 vTransformedNormal;
 
     void main(void) {
+      mediump vec3 ambientLight =  vec3(0.3, 0.3, 0.3);
+      mediump vec3 directionalLightColor = vec3(1, 1, 1);
+      mediump vec3 directionalVector = normalize(vec3(0.85, 0.8, 0.75));
+
+      mediump float directional = max(dot(vTransformedNormal.xyz, directionalVector), 0.0);
+      mediump vec3 vLighting = ambientLight + (directionalLightColor * directional);
+    
       gl_FragColor = vColor * vec4(vLighting, 1);
     }
   `;

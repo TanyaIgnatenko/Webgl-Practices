@@ -1,7 +1,7 @@
 export function makeCubeCreator() {
   return {
     createBuffers: createCubeBuffers,
-    drawObject:drawCube,
+    drawObject: drawCube,
   };
 }
 
