@@ -115,16 +115,8 @@ function drawSphere(gl, programInfo, buffers, deltaTime) {
   mat4.translate(modelViewMatrix, modelViewMatrix, [-0, 0, -6]);
 
   sphereRotation += deltaTime;
-  mat4.rotate(modelViewMatrix, modelViewMatrix, sphereRotation * 0.7, [
-    0,
-    0,
-    1
-  ]);
-  mat4.rotate(modelViewMatrix, modelViewMatrix, sphereRotation * 0.7, [
-    0,
-    1,
-    0
-  ]);
+  mat4.rotate(modelViewMatrix, modelViewMatrix, sphereRotation * 0.7, [0, 0, 1]);
+  mat4.rotate(modelViewMatrix, modelViewMatrix, sphereRotation * 0.7, [0, 1, 0]);
 
   // SET POSITION BUFFER
   {
