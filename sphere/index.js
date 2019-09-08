@@ -1,17 +1,55 @@
 const CIRCLE_COUNTS = 20;
+const TEXTURE_URL = 'assets/textures/earth.jpg';
 
 export function makeSphereCreator(gl) {
   const buffers = createSphereBuffers(gl, CIRCLE_COUNTS);
+  const texture = loadTexture(gl, TEXTURE_URL);
   return {
-    buffers: buffers,
+    buffers,
+    texture,
     drawObject: drawSphere
   };
+}
+
+function loadTexture(gl, url) {
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  const level = 0;
+  const internalFormat = gl.RGBA;
+  const width = 1;
+  const height = 1;
+  const border = 0;
+  const srcFormat = gl.RGBA;
+  const srcType = gl.UNSIGNED_BYTE;
+  const pixel = new Uint8Array([0, 0, 255, 255]);  // opaque blue
+  gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+    width, height, border, srcFormat, srcType,
+    pixel);
+
+  const image = new Image();
+  image.onload = function () {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+      srcFormat, srcType, image);
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  };
+  image.src = url;
+
+  return texture;
+}
+
+function isPowerOf2(value) {
+  return (value & (value - 1)) === 0;
 }
 
 function createSphereBuffers(gl, n) {
   // POSITIONS
   const meridianPositions = [];
-  const angleDelta = (2 * Math.PI) / n;
+  const angleDelta = (2 * Math.PI) / (n - 1);
   for (let j = 0; j < n; ++j) {
     meridianPositions.push([
       Math.sin(j * angleDelta),
@@ -21,18 +59,18 @@ function createSphereBuffers(gl, n) {
   }
 
   let positions = [];
-  meridianPositions.slice(1, n - 1).forEach(([radius, _, height]) => {
-    meridianPositions.forEach(meredianPos => {
+  const verticalAngleDelta = (Math.PI) / (n - 1);
+  for (let j = 0; j < n; ++j) {
+    const radius = Math.sin(j * verticalAngleDelta);
+    const height = Math.cos(j * verticalAngleDelta);
+    meridianPositions.forEach(([x, _, z]) => {
       positions.push([
-        meredianPos[0] * radius,
+        x * radius,
         height,
-        meredianPos[2] * radius
+        z * radius
       ]);
     });
-  });
-  const northPole = [0, 1, 0];
-  const southPole = [0, -1, 0];
-  positions.push(northPole, southPole);
+  }
 
   const positionBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -42,13 +80,18 @@ function createSphereBuffers(gl, n) {
     gl.STATIC_DRAW
   );
 
-  // COLORS
-  const sphereColor = [0, 0, 1, 1];
-  const colors = positions.map(() => sphereColor).flat();
+  // TEXTURE COORDS
+  let step = 1 / (n - 1);
+  const uvs = [];
+  for(let y = 0; y <= 1; y += step) {
+    for (let x = 0; x <= 1; x += step) {
+      uvs.push(x, y);
+    }
+  }
 
-  const colorBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+  const uvBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uvs), gl.STATIC_DRAW);
 
   // INDICES
   let indices = [];
@@ -94,16 +137,19 @@ function createSphereBuffers(gl, n) {
   );
 
   return {
+    uv: uvBuffer,
     position: positionBuffer,
     indices: indexBuffer,
     indicesCount: indices.length,
-    color: colorBuffer,
     normal: normalBuffer
   };
 }
 
 let sphereRotation = 0;
+
 function drawSphere(gl, programInfo, buffers, deltaTime) {
+  gl.useProgram(programInfo.program);
+
   const fieldOfView = (45 * Math.PI) / 180;
   const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
   const zNear = 0.1;
@@ -138,24 +184,28 @@ function drawSphere(gl, programInfo, buffers, deltaTime) {
     gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
   }
 
-  // SET COLOR BUFFER
+  // SET UV BUFFER
   {
-    const numComponents = 4;
+    const numComponents = 2;
     const type = gl.FLOAT;
     const normalize = false;
     const stride = 0;
+
     const offset = 0;
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.color);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.uv);
     gl.vertexAttribPointer(
-      programInfo.attribLocations.vertexColor,
+      programInfo.attribLocations.textureCoord,
       numComponents,
       type,
       normalize,
       stride,
       offset
     );
-    gl.enableVertexAttribArray(programInfo.attribLocations.vertexColor);
+    gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
   }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, this.texture);
+  gl.uniform1i(programInfo.uniformLocations.sampler, 0);
 
   // SET NORMAL BUFFER
   {
@@ -175,8 +225,6 @@ function drawSphere(gl, programInfo, buffers, deltaTime) {
     );
     gl.enableVertexAttribArray(programInfo.attribLocations.vertexNormal);
   }
-
-  gl.useProgram(programInfo.program);
 
   gl.uniformMatrix4fv(
     programInfo.uniformLocations.projectionMatrix,
